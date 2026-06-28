@@ -37,6 +37,45 @@ def test_god_nodes_have_required_keys():
     assert "degree" in result[0]
 
 
+def _bridge_vs_island_graph():
+    """A high-degree hub trapped in one community vs a lower-degree bridge.
+
+    `island` has degree 6 but every neighbor shares its community - it ties
+    nothing else together. `bridge` has degree 3 but reaches two other
+    communities. Raw degree ranks island first; bridging awareness must not.
+    """
+    import networkx as nx
+
+    G = nx.Graph()
+    communities = {0: ["island"], 1: ["bridge"], 2: [], 3: []}
+    for i in range(6):
+        nid = f"island_nbr_{i}"
+        G.add_node(nid, label=nid, source_file="a/island.py")
+        G.add_edge("island", nid)
+        communities[0].append(nid)
+    G.add_node("island", label="island", source_file="a/island.py")
+    G.add_node("bridge", label="bridge", source_file="b/bridge.py")
+    for comm, nid in ((1, "bridge_home"), (2, "far_a"), (3, "far_b")):
+        G.add_node(nid, label=nid, source_file=f"c/{nid}.py")
+        G.add_edge("bridge", nid)
+        communities[comm].append(nid)
+    return G, communities
+
+
+def test_god_nodes_bridge_beats_island_with_communities():
+    G, communities = _bridge_vs_island_graph()
+    ranked = [r["id"] for r in god_nodes(G, top_n=10, communities=communities)]
+    assert ranked.index("bridge") < ranked.index("island")
+
+
+def test_god_nodes_falls_back_to_degree_without_communities():
+    G, _ = _bridge_vs_island_graph()
+    ranked = [r["id"] for r in god_nodes(G, top_n=10)]
+    # No community map -> pure degree -> the degree-6 island leads.
+    assert ranked[0] == "island"
+    assert "communities_spanned" not in god_nodes(G, top_n=1)[0]
+
+
 def test_surprising_connections_cross_source_multi_file():
     """Multi-file graph: should find cross-file edges between real entities."""
     G = make_graph()

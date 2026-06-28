@@ -97,7 +97,13 @@ def generate(
         "## God Nodes (most connected - your core abstractions)",
     ]
     for i, node in enumerate(god_node_list, 1):
-        lines.append(f"{i}. `{node['label']}` - {node['degree']} edges")
+        spanned = node.get("communities_spanned")
+        if spanned:
+            noun = "community" if spanned == 1 else "communities"
+            suffix = f", bridges {spanned} other {noun}"
+        else:
+            suffix = ""
+        lines.append(f"{i}. `{node['label']}` - {node['degree']} edges{suffix}")
 
     lines += ["", "## Surprising Connections (you probably didn't know these)"]
     if surprise_list:

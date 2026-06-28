@@ -92,27 +92,59 @@ def _is_json_key_node(G: nx.Graph, node_id: str) -> bool:
     return label in _JSON_NOISE_LABELS
 
 
-def god_nodes(G: nx.Graph, top_n: int = 10) -> list[dict]:
-    """Return the top_n most-connected real entities - the core abstractions.
+def god_nodes(
+    G: nx.Graph,
+    top_n: int = 10,
+    communities: dict[int, list[str]] | None = None,
+) -> list[dict]:
+    """Return the top_n core abstractions, ranked by bridging-aware connectivity.
+
+    Raw degree alone is misleading: a node packed densely inside a single
+    isolated community - an experimental subsystem the rest of the codebase
+    never imports, say - racks up a high degree and masquerades as a core
+    abstraction, even though it ties nothing else together. We weight degree by
+    how many *other* communities a node reaches, so genuine cross-cutting hubs
+    outrank island-local hubs. Without a community map, fall back to plain
+    degree.
 
     File-level hub nodes are excluded: they accumulate import/contains edges
     mechanically and don't represent meaningful architectural abstractions.
     """
-    degree = dict(G.degree())
-    sorted_nodes = sorted(degree.items(), key=lambda x: x[1], reverse=True)
-    result = []
-    for node_id, deg in sorted_nodes:
+    node_community = _node_community_map(communities) if communities else {}
+
+    def communities_spanned(node_id: str) -> int:
+        """Count distinct communities this node reaches besides its own."""
+        if not node_community:
+            return 0
+        own = node_community.get(node_id)
+        return len({
+            c for nbr in G.neighbors(node_id)
+            if (c := node_community.get(nbr)) is not None and c != own
+        })
+
+    scored = []
+    for node_id, deg in G.degree():
         if _is_file_node(G, node_id) or _is_concept_node(G, node_id) or _is_json_key_node(G, node_id):
             continue
         if G.nodes[node_id].get("label", "") in _BUILTIN_NOISE_LABELS:
             continue
-        result.append({
+        spans = communities_spanned(node_id)
+        # Island-local hubs (spans == 0) keep their raw degree; every extra
+        # community a node bridges multiplies its standing as a core abstraction.
+        scored.append((deg * (1 + spans), deg, spans, node_id))
+
+    scored.sort(key=lambda x: (x[0], x[1]), reverse=True)
+    result = []
+    for score, deg, spans, node_id in scored[:top_n]:
+        entry = {
             "id": node_id,
             "label": G.nodes[node_id].get("label", node_id),
             "degree": deg,
-        })
-        if len(result) >= top_n:
-            break
+        }
+        if node_community:
+            entry["communities_spanned"] = spans
+            entry["score"] = score
+        result.append(entry)
     return result
 
 
