@@ -387,7 +387,7 @@ G = build_from_json(extraction)
 communities = cluster(G)
 cohesion = score_all(G, communities)
 tokens = {'input': extraction.get('input_tokens', 0), 'output': extraction.get('output_tokens', 0)}
-gods = god_nodes(G)
+gods = god_nodes(G, communities=communities)
 surprises = surprising_connections(G, communities)
 labels = {cid: 'Community ' + str(cid) for cid in communities}
 # Placeholder questions - regenerated with real labels in Step 5
